@@ -1,11 +1,504 @@
-# History files
-.Rhistory
 
-# Example code in package build process
-*-Ex.R
+################################################################################################################
+##################### projet Data science: les accidents de la route en France 2006-2012  ######################
+################################################################################################################
 
-# R data files from past sessions
-.Rdata
 
-# RStudio files
-.Rproj.user/
+## chargement des library utilisées 
+
+library(sqldf)
+library(ggplot2)
+library(sp)
+library(rgeos)
+library(maptools)
+library(ggplot2)
+library(ggmap)
+library(rjson)
+
+##############################################################################################################
+### les bases de données sont disponibles sur: 
+### https://www.data.gouv.fr/fr/datasets/base-de-donnees-accidents-corporels-de-la-circulation-sur-6-annees/
+###https://www.data.gouv.fr/fr/datasets/donnees-des-accidents-corporels-de-la-circulation-routiere/
+
+
+
+#####################################################################################################################
+################                  lecture des bases de données et prétraitement des données    ######################
+#####################################################################################################################
+
+
+##les tables 2006-2011
+
+accident<-read.csv("C:/Users/acer/Desktop/études M2/recueil de données/projet/accident.csv",stringsAsFactors=F, quote = "",flush = T)
+
+vehicule<-read.csv("C:/Users/acer/Desktop/études M2/recueil de données/projet/vihecule.csv",stringsAsFactors=F,quote = "",flush = T)
+
+##les tables 2012
+table1<-read.csv("C:/Users/acer/Desktop/études M2/recueil de données/projet/caracteristiques.csv")
+table2<-read.csv("C:/Users/acer/Desktop/études M2/recueil de données/projet/usagers.csv")
+table3<-read.csv("C:/Users/acer/Desktop/études M2/recueil de données/projet/lieux.csv")
+
+
+
+## choix des variables retenues dans la table accident
+
+accident<-sqldf("select numac, org,lum , agg ,int ,atm , col, com, dep ,catr , infra, circ , nbv , vosp ,situ, ttue, tbg , tbl, tindm ,grav from accident  ", dbname = tempfile())
+
+
+
+
+str(accident)
+str(vehicule)
+
+## recodage de la variable grav en numérique
+
+accident$grav<-as.numeric(accident$grav)
+
+#####################################################################################################################
+################                     les statistiques descriptives                             ######################
+#####################################################################################################################
+
+
+summary(accident)
+
+
+######## I- Analyse du nombre d'accidents en fonction de chaque variables:
+
+
+### 1- le nombre d'accidents en fonction des modalités de la lumière
+
+
+accident_lumiere<-sqldf("select lum, COUNT(DISTINCT numac) as nombreaccidents  from accident   group by lum", dbname=tempfile()) 
+accident_lumiere
+
+ggplot(accident_lumiere)+geom_bar(aes(x=lum, y=nombreaccidents), stat="identity", fill="magenta")+xlab("La lumière")+ylab("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction de la lumière")+ 
+  theme(plot.title = element_text(lineheight=0.2, face="bold", size=20), panel.background = element_rect(fill = "azure2"))
+
+
+#### 2-le nombre d'accidents en fonction des conditions atmosphériques
+
+accident_atm<-sqldf("select atm, COUNT(DISTINCT numac) as nombreaccidents  from accident   group by atm", dbname=tempfile()) 
+accident_atm
+
+ggplot(accident_atm)+geom_bar(aes(x=atm, y=nombreaccidents), stat="identity", fill="magenta")+scale_x_discrete("Condition atmosphériques", limits=c(1:9))+ylab("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction des conditions atmosphériques")+ 
+  theme(plot.title = element_text(lineheight=0.2, face="bold", size=18), panel.background = element_rect(fill = "azure2"))
+
+
+#### 3- le nombre d'accidents en fonction de l'aménagement et l'infrastructure
+
+accident_infra<-sqldf("select infra, COUNT(DISTINCT numac) as nombreaccidents  from accident   group by infra", dbname=tempfile()) 
+accident_infra
+
+ggplot(accident_infra)+geom_bar(aes(x=infra, y=nombreaccidents), stat="identity", fill="magenta")+xlab("Aménagement-infrastructure")+scale_y_continuous("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction de l'aménagement et l'infrastructure")+ 
+  theme(plot.title = element_text( face="bold", size=18))+theme( panel.background = element_rect(fill = "azure2"))
+
+# les NAs sont codés en 0 donc il faut les enlever:
+
+infrastructure<-accident[accident$infra!=0,]
+
+accident_infra2<-sqldf("select infra, COUNT(DISTINCT numac) as nombreaccidents  from infrastructure   group by infra", dbname=tempfile()) 
+accident_infra2
+
+ggplot(accident_infra2)+geom_bar(aes(x=infra, y=nombreaccidents), stat="identity", fill="magenta")+scale_x_discrete("Aménagement-infrastructure", c(0:7))+scale_y_continuous("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction de l'aménagement et l'infrastructure")+ 
+  theme(plot.title = element_text( face="bold", size=18))+theme( panel.background = element_rect(fill = "azure2"))
+
+
+
+
+#### 4-le nombre d'accidents en fonction de la Catégorie de la route
+accident_catr<-sqldf("select catr, COUNT(DISTINCT numac) as nombreaccidents  from accident   group by catr", dbname=tempfile()) 
+accident_catr
+
+ggplot(accident_catr)+geom_bar(aes(x=catr, y=nombreaccidents), stat="identity", fill="magenta")+scale_x_discrete("La catégorie de la route")+scale_y_continuous("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction de la catégorie de la route")+ 
+  theme(plot.title = element_text( face="bold", size=18))+theme( panel.background = element_rect(fill = "azure2"))
+
+#### 5- le nombre d'accidents en fonction du régime de circulation
+accident_circ<-sqldf("select circ, COUNT(DISTINCT numac) as nombreaccidents  from accident   group by circ", dbname=tempfile()) 
+accident_circ
+
+ggplot(accident_circ)+geom_bar(aes(x=circ, y=nombreaccidents), stat="identity", fill="magenta")+xlab("Le régime de circulation")+scale_y_continuous("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction du régime de circulation")+ 
+  theme(plot.title = element_text( face="bold", size=18))+theme( panel.background = element_rect(fill = "azure2"))
+
+
+#### 6-le nombre d'accidents en fonction de la localisation par rapport à l’agglomération
+accident_agg<-sqldf("select agg, COUNT(DISTINCT numac) as nombreaccidents  from accident   group by agg", dbname=tempfile()) 
+accident_agg
+
+ggplot(accident_agg)+geom_bar(aes(x=agg, y=nombreaccidents), stat="identity", fill="magenta")+scale_x_discrete("La localisation par rapport à l’agglomération", limits=c(0:9))+scale_y_continuous("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction de la localisation par rapport à l’agglomération")+ 
+  theme(plot.title = element_text( face="bold", size=18))+theme( panel.background = element_rect(fill = "azure2"))
+
+####7-le nombre d'accidents en fonction du type de collision 
+accident_col<-sqldf("select col, COUNT(DISTINCT numac) as nombreaccidents  from accident   group by col", dbname=tempfile()) 
+accident_col
+
+ggplot(accident_col)+geom_bar(aes(x=col, y=nombreaccidents), stat="identity", fill="magenta")+scale_x_discrete("Le type de collision ", limits=c(0:7))+scale_y_continuous("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction du type de collision ")+ 
+  theme(plot.title = element_text( face="bold", size=18))+theme( panel.background = element_rect(fill = "azure2"))
+
+####8-le nombre d'accidents en fonction de l'intersection 
+accident_int<-sqldf("select int, COUNT(DISTINCT numac) as nombreaccidents  from accident   group by int", dbname=tempfile()) 
+accident_int
+
+ggplot(accident_int)+geom_bar(aes(x=int, y=nombreaccidents), stat="identity", fill="magenta")+scale_x_discrete("Le type de l'intersection", limits=c(0:9))+scale_y_continuous("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction de l'intersection ")+ 
+  theme(plot.title = element_text( face="bold", size=18))+theme( panel.background = element_rect(fill = "azure2"))
+
+#### 9-le nombre d'accidents en fonction de l'organisme
+accident_org<-sqldf("select org, COUNT(DISTINCT numac) as nombreaccidents  from accident   group by org", dbname=tempfile()) 
+accident_org
+
+ggplot(accident_org)+geom_bar(aes(x=org, y=nombreaccidents), stat="identity", fill="magenta")+scale_x_discrete("Le type de l'organisme", limits=c(0:5))+scale_y_continuous("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction de l'organisme ")+ 
+  theme(plot.title = element_text( face="bold", size=18))+theme( panel.background = element_rect(fill = "azure2"))
+
+
+
+
+
+#### 10-le nombre d'accidents en fonction du type de la voie spéciale
+accident_vosp<-sqldf("select vosp, COUNT(DISTINCT numac) as nombreaccidents  from accident   group by vosp", dbname=tempfile()) 
+accident_vosp<-accident_vosp[c(3,4,5),]
+
+ggplot(accident_vosp)+geom_bar(aes(x=vosp, y=nombreaccidents), stat="identity", fill="magenta")+scale_x_discrete("Le type de la voie spéciale", limits=c(0:3))+scale_y_continuous("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction du type de la voie spéciale ")+ 
+  theme(plot.title = element_text( face="bold", size=18))+theme( panel.background = element_rect(fill = "azure2"))
+
+####le nombre d'accidents en fonction de la situation de l'accident
+accident_situ<-sqldf("select situ, COUNT(DISTINCT numac) as nombreaccidents  from accident   group by situ", dbname=tempfile()) 
+accident_situ<-accident_situ[3:7,]
+
+ggplot(accident_situ)+geom_bar(aes(x=situ, y=nombreaccidents), stat="identity", fill="magenta")+scale_x_discrete("La situation de l'accident", limits=c(0:7))+scale_y_continuous("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction de la situation de l'accident ")+ 
+  theme(plot.title = element_text( face="bold", size=18))+theme( panel.background = element_rect(fill = "azure2"))
+
+
+#### 11- le nombre d'accidents en fonction du nombre de voies totale
+
+accident_nbv<-sqldf("select nbv, COUNT(DISTINCT numac) as nombreaccidents  from accident   group by nbv", dbname=tempfile()) 
+accident_nbv
+
+ggplot(accident_nbv)+geom_point(aes(x=nbv, y=nombreaccidents), stat="identity", col="magenta")+scale_x_discrete("Le nombre de voies totales")+scale_y_continuous("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction du nombre des voies totales ")+ 
+  theme(plot.title = element_text( face="bold", size=18))+theme( panel.background = element_rect(fill = "azure2"))
+
+
+
+
+### 12-le nombre d'accidents par depatement
+
+departement<-sqldf("select dep, COUNT (DISTINCT numac)as nombreaccidents from accident group by dep ", dbname=tempfile())
+departement
+
+ggplot(departement)+geom_bar(aes(x=dep, y=nombreaccidents), stat="identity", fill="magenta")+xlab("Les départements")+scale_y_continuous("Nombre d'accidents")+
+  ggtitle("Nombre d'accidents en fonction des départements")+ 
+  theme(plot.title = element_text( face="bold", size=18))+theme( panel.background = element_rect(fill = "azure2"))
+
+## Ce graphe n'est pas lisible=> visualisation sur une carte
+
+
+### visualisation du nombre d'accidents en métropole:
+### les fichiers .shp utilisés sont disponibles sur dropbox
+
+departement<-sqldf("select dep, COUNT (DISTINCT numac)as nombreaccidents from accident group by dep ", dbname=tempfile())
+departement
+
+metropole<-departement[1:96,]
+
+metropole$dep[c(10:19,22:96)]<-metropole$dep[c(10:19,22:96)]/10
+metropole$dep[c(20,21)]<-c("2A", "2B")
+
+metropole$dep[c(1:9)]<-c("01","02",  "03",  "04",  "05",  "06",  "07",  "08",  "09")
+
+
+metropole$nombreaccidents=cut(metropole$nombreaccidents,c(0,2000,5000,10000,20000,300000,40000,50000))
+
+dept=readShapeSpatial("C:/Users/acer/Desktop/études M2/recueil de données/departements-20140306-50m.shp",
+                      proj4string=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"))
+
+
+gg = fortify(dept,region="code_insee")
+
+
+ggdata=merge(gg,metropole,by.x="id",by.y="dep")
+
+pe=order(ggdata$group,ggdata$order)
+ggdata=ggdata[pe,]
+# creation de la carte
+ggplot(ggdata,aes(x=long,y=lat,group=group,fill=nombreaccidents))+geom_polygon()+
+  coord_map()+scale_fill_brewer("% nombre d'accidents",palette="Reds")+
+  ggtitle("Nombre d'accidents en France métropolitaine entre 2006-2011")+
+  theme(plot.title = element_text( face="bold", size=18))+
+  xlab("La longitude")+ylab("La latitude")
+
+### le nombre d'accidents en outre-mer
+outremer<-departement[97:100,]
+
+outremer$nombreaccidents=cut(outremer$nombreaccidents,c(0,100,1000,2000,3000,4000))
+
+gg = fortify(dept,region="code_insee")
+
+
+ggdata=merge(gg,outremer,by.x="id",by.y="dep")
+
+pe=order(ggdata$group,ggdata$order)
+ggdata=ggdata[pe,]
+# creation de la carte
+ggplot(ggdata,aes(x=long,y=lat,group=group,fill=nombreaccidents))+geom_polygon()+
+  coord_map()+scale_fill_brewer("% nombre d'accidents",palette="Reds")+
+  ggtitle("Nombre d'accidents en France métropolitaine entre 2006-2011")+
+  theme(plot.title = element_text( face="bold", size=18))+
+  xlab("La longitude")+ylab("La latitude")
+
+### un graphe qui manque de densité, on a decidé de ne pas le mettre dans le rapport
+
+
+
+
+######## II- Analyse de la gravité de l'accident en fonction de chaque variable
+
+
+boxplot(accident$grav~accident$lum,ylim=c(0,50), main="La gravité en fonction de la lumière",xlab="La lumière",ylab=" l'indice de gravité de l'accident")
+boxplot(accident$grav~accident$atm,ylim=c(0,50),main="La gravité en fonction des conditions atmosphériques",xlab="conditions atmospheriques",ylab=" l'indice de gravité de l'accident")
+boxplot(accident$grav~accident$infra,ylim=c(0,50),main="la gravité en fonction des infrastructures",xlab="infrastructures",ylab="l'indice de gravité de l'accident")
+boxplot(accident$grav~accident$catr,ylim=c(0,50),main="Gravité en fonction de la categorie de la route",xlab="categorie de la route",ylab="l'indice de gravité de l'accident")
+boxplot(accident$grav~accident$int,ylim=c(0,50),main="Gravité en fonction de l'intersection ",xlab="intersection",ylab="l'indice de gravité de l'accident")
+boxplot(accident$grav~accident$agg,ylim=c(0,50),main="l'indice de gravité en fonction de l'agglomération",xlab="localisation par raport à l'agglomération",ylab="l'indice de gravité de l'accident")
+boxplot(accident$grav~accident$cir,ylim=c(0,50),main="Gravité en fonction du régime de circulation",xlab="régime de circulation",ylab="l'indice de gravité de l'accident")
+boxplot(accident$grav~accident$col,ylim=c(0,50),main="l'indice de gravité en fonction du type de collision",xlab="type de collision",ylab="l'indice de gravité de l'accident")
+boxplot(accident$ttue~accident$agg,ylim=c(0,50),main="l'indice de gravité en fonction du type de collision",xlab="type de collision",ylab="l'indice de gravité de l'accident")
+boxplot(accident$grav~accident$org,ylim=c(0,50),main="l'indice de gravité en fonction de l'organisme",xlab="organisme",ylab="l'indice de gravité de l'accident")
+boxplot(accident$grav~accident$vosp,ylim=c(0,50),main="l'indice de gravité en fonction de la voie spéciale",xlab="la voie spéciale",ylab="l'indice de gravité de l'accident")
+boxplot(accident$grav~accident$situ,ylim=c(0,50),main="la gravité en fonction de la situation de l'accident",xlab="situation de l'accident",ylab="l'indice de gravité de l'accident")
+boxplot(accident$grav~accident$nbv,ylim=c(0,50),main="la gravité en fonction du nombre de voie de circulation",xlab="nombre de voie de circulation",ylab="l'indice de gravité de l'accident")
+boxplot(accident$grav~accident$dep,ylim=c(0,50),main="l'indice de gravité en fonction du type de collision",xlab="type de collision",ylab="l'indice de gravité de l'accident")
+
+
+##### visualisation du maximum de la gravité sur la carte de la France métropolitaine
+
+departement_grav<-sqldf("select dep, max(grav)as gravite from accident group by dep  ", dbname=tempfile())
+departement_grav
+
+metropole<-departement_grav[1:96,]
+
+metropole$dep[c(10:19,22:96)]<-metropole$dep[c(10:19,22:96)]/10
+metropole$dep[c(20,21)]<-c("2A", "2B")
+
+metropole$dep[c(1:9)]<-c("01","02",  "03",  "04",  "05",  "06",  "07",  "08",  "09")
+
+
+metropole$gravite=cut(metropole$gravite,c(100,300,500,1000,2000,3000))
+
+dept=readShapeSpatial("C:/Users/acer/Desktop/études M2/recueil de données/departements-20140306-50m.shp",
+                      proj4string=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"))
+
+
+
+
+gg = fortify(dept,region="code_insee")
+
+
+ggdata=merge(gg,metropole,by.x="id",by.y="dep")
+
+pe=order(ggdata$group,ggdata$order)
+ggdata=ggdata[pe,]
+# creation de la carte
+ggplot(ggdata,aes(x=long,y=lat,group=group,fill=gravite))+geom_polygon()+
+  coord_map()+scale_fill_brewer("% gravité des accidents",palette="Reds")+
+  ggtitle("Le max de la gravité des accidents en France métropolitaine entre 2006-2011")+
+  theme(plot.title = element_text( face="bold", size=18))+
+  xlab("La longitude")+ylab("La latitude")
+
+
+
+
+
+
+
+#####################################################################################################################
+################                     la modélisation du nombre de tués                         ######################
+#####################################################################################################################
+
+
+###puisque dans la table 2012 la variable grave=2 lorqu'il y a un tué, on peut compter le nombre de tué par numéro d'accident
+### pour avoir la même variable ttue qui est dans la table accident (2006-2012) et pouvoir concaténer les deux tables
+
+
+##recodage de la variable grav
+
+grave2<-sqldf("select Num_Acc ,grav from table2 where grav=2", dbname=tempfile())
+head(grave2)
+
+## comptage du nombre des tués par accident
+tuee<-sqldf("select Num_Acc ,Count(grav) as ttue from grave2 group by Num_Acc ", dbname=tempfile())
+
+
+
+### selectionner des tables 2012 les mêmes variables que la table accidents
+
+variables<-sqldf("select distinct t3.Num_Acc,catr,infra,circ,nbv, vosp, situ from table3 as t3, table1 as t1 where t1.Num_Acc=t3.Num_Acc group by t3.Num_Acc", dbname=tempfile())
+
+
+###fusionner les nombre de tuee avec la dernière table créee
+
+table<-merge(variables,tuee, by="Num_Acc", all.x=T)
+
+### recoder les NA par des zero car dans la colonnes tuee NA signifie qu'il n'ya pas eu de tuées dans l'accident, il faut remplacer NA par zéro
+
+table[is.na(table[,5]),5]<-0
+
+
+#fusionner table et table 1 pour avoir en plus les variable lum agg int atm
+
+table2012<-merge(table,table1, by="Num_Acc")
+
+
+
+#### selectionner les variable qui nous interesse dans regression
+base2012<-sqldf("select  ttue,lum,agg,int,atm,catr,col,vosp,infra,circ,nbv,situ,dep from table2012", dbname=tempfile())
+
+
+
+#### 2006-2011
+
+#### selectionner les variable qui nous interessent dans la table accident
+
+base2006<-sqldf("select  ttue,lum,agg,int,atm,catr,col,vosp,infra,circ,nbv,situ,dep from accident", dbname=tempfile())
+
+
+
+###concaténer les table 2006-2011 et 2012 
+
+base<-rbind(base2006,base2012)
+
+
+#recoder les variables où les NAs sont rerésentés par des zéros, car lors de la régression zéro est pris pour modalité de référence
+
+base$infra[base$infra==0]<-NA
+base$int[base$int==0]<-NA
+base$vosp[base$vosp==0]<-NA
+base$cir[base$circ==0]<-NA
+base$situ[base$situ==0]<-NA
+
+donnee=na.omit(base)
+
+
+## nous n'avons pas mi les variables dep et col car elles ont beaucoup de modalités, ce qui rend la regression compliquée
+
+#### la régression: modèle de poisson car ttue représente des données de comptage
+
+reg_tues<-glm(ttue~factor(lum)+factor(agg)+factor(int)+factor(atm)+factor(catr)+factor(infra)+factor(circ)
+              +factor(vosp)+factor(col)+nbv+factor(situ),family=poisson(),data=donnee,na.action=na.exclude)
+
+summary(reg_tues)
+
+
+
+#####################################################################################################################
+################                     la modélisation de la gravité de l'accident               ######################
+#####################################################################################################################
+
+
+### Calculer le nombre de voiture par accident
+
+nbre_voiture<-sqldf("select numac, count(*)as nbre_voitures from vehicule group by numac ", dbname=tempfile())
+
+## ajouter cette variable à la table accident
+
+accident<-cbind(accident,nbre_voiture)
+
+### création de la variable annee_circulation qui représente le minimum de l'année de mise en circulation des voitures impliquées dans l'accident
+
+## choisir le min
+r<-aggregate(vehicule$anmc, list(vehicule$numac), min)
+
+names(r)<-c("numac","min_annee_voiture")
+
+
+accident<-cbind(accident,min_annee_voiture=r$min_annee_voiture)
+
+##recodage de la varible en ancienne si l'année de mise en circulation est inférieure à 2000 et neuve sinon
+annee_circulation=ifelse(accident$min_annee_voiture<2000,"ancienne" ,"neuve")
+
+
+
+
+
+## recodage des zéros par des NAs comme nous l'avons fait précédemment avec la table base 
+
+accident$infra[accident$infra==0]<-NA
+accident$circ[accident$circ==0]<-NA
+accident$int[accident$int==0]<-NA
+accident$vosp[accident$vosp==0]<-NA
+accident$situ[accident$situ==0]<-NA
+
+
+
+donnee1<-cbind(accident, annee_circulation)
+donnee2<-na.omit(donnee1)
+
+###################################  I- modèle gaussien pour la gravité des accidents 
+
+reg_grav<-glm(donnee2$grav~factor(lum)+factor(agg)+factor(int)+factor(atm)+factor(col)+ factor(catr)+factor(circ)+nbv+
+          factor(vosp)+factor(infra)+factor(situ)+factor(annee_circulation)+nbre_voitures, data=donnee2)
+
+
+
+summary(reg_grav)
+
+
+## la sélection des variables
+
+finalreg_grav<-step(reg_grav, direction="both")
+
+summary(finalreg_grav)
+
+
+plot(finalreg_grav)
+
+
+
+#### le modèle gaussien se comporte très mal
+
+##histogramme de grav
+
+hist(accident$grav)
+
+### ressemble à une loi exponentielle
+
+
+
+###################################  II- modèle Gamma pour modéliser grav
+
+regfinale<-glm(donnee2$grav~factor(lum)+factor(agg)+factor(int)+factor(atm)+factor(col)+ factor(catr)+factor(circ)+nbv+
+           factor(vosp)+factor(infra)+factor(situ)+factor(annee_circulation)+nbre_voitures, family=Gamma, data=donnee2)
+### la fonction de lien inverse donne des erreurs
+
+## changement de fonction de lien en log
+
+regfinale<-glm(donnee2$grav~factor(lum)+factor(agg)+factor(int)+factor(atm)+factor(col)+ factor(catr)+factor(circ)+nbv+
+           factor(vosp)+factor(infra)+factor(situ)+factor(annee_circulation)+nbre_voitures, family=Gamma(link=log), data=donnee2)
+
+summary(regfinale)
+
+
+plot(regfinale)
+
+
+gammafinal<-step(regfinale)
+
+summary(gammafinal)
+
+par(mfrow=c(1,4))
+plot(gammafinal)
+par(mfrow=c(1,1))
+
+
+
+
